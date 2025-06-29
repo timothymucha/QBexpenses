@@ -1,10 +1,10 @@
-
 import streamlit as st
 import pandas as pd
 import csv
 from io import StringIO
 from datetime import datetime
 
+# Map categories to expense/COGS accounts
 def map_category_to_account(category):
     category = str(category).strip().lower()
     if category == "express adjustments":
@@ -26,6 +26,7 @@ def map_category_to_account(category):
     else:
         return "Ask My Accountant"
 
+# Map payment type to bank account
 def map_payment_account(payment_type):
     payment_type = str(payment_type).strip().lower()
     if payment_type == "mpesa":
@@ -37,33 +38,37 @@ def map_payment_account(payment_type):
     else:
         return "Undeposited Funds"
 
+# Parse amount to float
 def parse_amount(value):
     try:
         return float(str(value).replace("Ksh", "").replace(",", "").replace(" ", "").strip())
     except:
         return 0.0
 
+# Convert to QuickBooks-compatible IIF
 def convert_to_iif(df):
     output = StringIO()
     writer = csv.writer(output, delimiter='\t', lineterminator='\n')
+
+    # IIF headers
     writer.writerow(["!TRNS", "TRNSTYPE", "DATE", "ACCNT", "NAME", "AMOUNT", "DOCNUM", "MEMO"])
     writer.writerow(["!SPL", "TRNSTYPE", "DATE", "ACCNT", "NAME", "AMOUNT", "DOCNUM",
                      "MEMO", "QNTY", "PRICE", "CLASS", "TAXABLE", "INVITEM"])
-    writer.writerow(["!ENDTRNS"])  # This row defines the end of each transaction block
-    
+    writer.writerow(["!ENDTRNS"])
+
     df = df[df['Amount'].notnull()]
 
     for i, row in df.iterrows():
-        amount = parse_amount(row['Amount'])
+        raw_amount = parse_amount(row['Amount'])
         category = str(row.get('Category', '')).strip()
         is_adjustment = category.lower() == "express adjustments"
 
-        # Skip transfers (positive adjustments), only keep payouts
-        if is_adjustment and amount >= 0:
+        # For "Express adjustments", only include payouts (negatives from bank)
+        if is_adjustment and raw_amount >= 0:
             continue
 
-        # For all others, treat as payouts regardless of sign
-        amount = abs(amount)  # Normalize all to positive, will assign negative to bank later
+        # All are payouts from the bank, so treat amount as negative outflow
+        amount = abs(raw_amount)
 
         account = map_category_to_account(category)
         pay_account = map_payment_account(row.get('PAYMENT', ''))
@@ -77,25 +82,33 @@ def convert_to_iif(df):
         except:
             date = ""
 
-        # TRNS: payment from the bank (should be negative)
+        # TRNS = money going out of bank
         writer.writerow(["TRNS", "CHECK", date, pay_account, name, -amount, docnum, memo])
 
-        # SPL: to the respective expense or COGS account (positive)
+        # SPL = expense or COGS
         writer.writerow(["SPL", "CHECK", date, account, name, amount, docnum, memo, "", "", "", "N", ""])
 
         writer.writerow(["ENDTRNS"])
 
     return output.getvalue()
 
+# Streamlit UI
+st.set_page_config(page_title="Bank Statement to IIF", layout="centered")
+st.title("🔁 Bank/Expense Statement to QuickBooks IIF")
+st.markdown("""
+This tool converts your uploaded expense or bank statement into **QuickBooks .IIF format** for import.
 
-st.title("Expense Listing to QuickBooks IIF Converter")
-st.write("This tool converts your CSV Expense Listing into QuickBooks-compatible IIF format.")
+- Uses the correct accounts for categories like *Pastries*, *Salaries*, *Paper cups*, etc.  
+- Filters **Express adjustments** to include only **payouts**  
+- Payee defaults to **Column 1** or **"Walk In"**  
+""")
 
-uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
+uploaded_file = st.file_uploader("📤 Upload your CSV file", type="csv")
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
-    st.write("Preview:", df.head())
+    st.success("✅ File uploaded successfully!")
+    st.dataframe(df.head(10))
 
-    if st.button("Convert and Download IIF"):
+    if st.button("🚀 Convert and Download IIF"):
         iif_data = convert_to_iif(df)
-        st.download_button("Download .iif File", iif_data, file_name="converted_expenses.iif", mime="text/plain")
+        st.download_button("📥 Download IIF File", iif_data, file_name="expenses_converted.iif", mime="text/plain")
