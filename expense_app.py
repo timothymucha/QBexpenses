@@ -93,8 +93,8 @@ def convert_to_iif(df):
     return output.getvalue()
 
 # Streamlit UI
-st.set_page_config(page_title="Bank Statement to IIF", layout="centered")
-st.title("🔁 Bank/Expense Statement to QuickBooks IIF")
+st.set_page_config(page_title="Expense listing to IIF", layout="centered")
+st.title("🔁 Expense listing to QuickBooks IIF")
 st.markdown("""
 This tool converts your uploaded expense or bank statement into **QuickBooks .IIF format** for import.
 
