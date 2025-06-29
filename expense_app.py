@@ -54,7 +54,11 @@ def convert_to_iif(df):
 
     for i, row in df.iterrows():
         amount = parse_amount(row['Amount'])
-        if amount >= 0:
+        category = str(row.get('Category', '')).strip()
+        is_adjustment = category.lower() == "express adjustments"
+
+        # For "Express adjustments", only include negative (paid out) entries
+        if is_adjustment and amount >= 0:
             continue
 
         category = row['Category']
