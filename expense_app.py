@@ -49,7 +49,8 @@ def convert_to_iif(df):
     writer.writerow(["!TRNS", "TRNSTYPE", "DATE", "ACCNT", "NAME", "AMOUNT", "DOCNUM", "MEMO"])
     writer.writerow(["!SPL", "TRNSTYPE", "DATE", "ACCNT", "NAME", "AMOUNT", "DOCNUM",
                      "MEMO", "QNTY", "PRICE", "CLASS", "TAXABLE", "INVITEM"])
-
+    writer.writerow(["!ENDTRNS"])  # This row defines the end of each transaction block
+    
     df = df[df['Amount'].notnull()]
 
     for i, row in df.iterrows():
@@ -57,31 +58,35 @@ def convert_to_iif(df):
         category = str(row.get('Category', '')).strip()
         is_adjustment = category.lower() == "express adjustments"
 
-        # For "Express adjustments", only include negative (paid out) entries
+        # Skip transfers (positive adjustments), only keep payouts
         if is_adjustment and amount >= 0:
             continue
 
-        category = row['Category']
+        # For all others, treat as payouts regardless of sign
+        amount = abs(amount)  # Normalize all to positive, will assign negative to bank later
+
         account = map_category_to_account(category)
         pay_account = map_payment_account(row.get('PAYMENT', ''))
         name = str(row.get('Column 1', '')).strip() or "Walk In"
         docnum_src = str(row.get('Tracking No', '')).strip()
         docnum = f"EXP-{docnum_src.replace(' ', '').replace('/', '-')}" if docnum_src else f"EXP-{i}"
-        memo = str(category)
+        memo = category
+
         try:
             date = pd.to_datetime(row['Date']).strftime('%m/%d/%Y')
         except:
             date = ""
 
-        # TRNS row: Bank/Cash payment out
-        writer.writerow(["TRNS", "CHECK", date, pay_account, name, amount, docnum, memo])
+        # TRNS: payment from the bank (should be negative)
+        writer.writerow(["TRNS", "CHECK", date, pay_account, name, -amount, docnum, memo])
 
-        # SPL row: Expense or COGS
-        writer.writerow(["SPL", "CHECK", date, account, name, -amount, docnum, memo, "", "", "", "N", ""])
+        # SPL: to the respective expense or COGS account (positive)
+        writer.writerow(["SPL", "CHECK", date, account, name, amount, docnum, memo, "", "", "", "N", ""])
 
         writer.writerow(["ENDTRNS"])
 
     return output.getvalue()
+
 
 st.title("Expense Listing to QuickBooks IIF Converter")
 st.write("This tool converts your CSV Expense Listing into QuickBooks-compatible IIF format.")
