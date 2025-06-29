@@ -79,8 +79,8 @@ def convert_to_iif(df):
 
     return output.getvalue()
 
-st.title("Bank Statement to QuickBooks IIF Converter")
-st.write("This tool converts your CSV bank statements into QuickBooks-compatible IIF format.")
+st.title("Expense Listing to QuickBooks IIF Converter")
+st.write("This tool converts your CSV Expense Listing into QuickBooks-compatible IIF format.")
 
 uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
 if uploaded_file is not None:
